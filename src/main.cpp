@@ -1,143 +1,62 @@
-#include <iostream>
+ï»¿#include <iostream>
 #include <string>
 #include <vector>
 
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "stb_image_write.h"
+#include "dwt.h"
 
-using namespace std;
+static bool parse_args(int argc, char** argv, Options& opt) {
+    if (argc < 2) return false;
 
-// Â²³æ¥]¤@­Ó Image µ²ºc¡A¤§«á°µ DWT / Fusion ¤ñ¸û¦n¥Î
-struct Image {
-    int width = 0;
-    int height = 0;
-    int channels = 0; // e.g. 3 = RGB, 1 = Gray
-    std::vector<unsigned char> data; // size = width * height * channels
-};
-
-// Åª¹Ï¤u¨ã¨ç¦¡
-// desired_channels = 0 ¥Nªíºû«ù­ì³q¹D¼Æ
-// ¨Ò¦p RGB ¹Ï¥Î 3¡BIR ¦Ç¶¥¹Ï¥Î 1
-bool load_image(const std::string& path,
-    int desired_channels,
-    Image& out_img)
-{
-    int w, h, c;
-    // stbi_uc ´N¬O unsigned char
-    stbi_uc* pixels = stbi_load(path.c_str(), &w, &h, &c, desired_channels);
-    if (!pixels) {
-        std::cerr << "[Error] Failed to load image: " << path << "\n"
-            << "        stbi failure reason: " << stbi_failure_reason() << std::endl;
-        return false;
+    std::vector<std::string> positional;
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--mode" && i + 1 < argc) {
+            opt.mode = argv[++i];
+        } else if (arg == "--batch") {
+            opt.batch = true;
+        } else if (arg == "--output" && i + 1 < argc) {
+            opt.output_dir = argv[++i];
+        } else {
+            positional.push_back(arg);
+        }
     }
 
-    out_img.width = w;
-    out_img.height = h;
-    out_img.channels = (desired_channels > 0) ? desired_channels : c;
-    out_img.data.assign(pixels, pixels + w * h * out_img.channels);
-
-    // ­ì©l°O¾ÐÅéÄÀ©ñ
-    stbi_image_free(pixels);
-    return true;
-}
-
-// Â²³æ¼g¹Ï¤u¨ã¨ç¦¡¡]¤è«K debug ¥Î¡^
-// ±N Image ¼g¦¨ PNG
-bool write_image_png(const std::string& path, const Image& img)
-{
-    if (img.data.empty()) {
-        std::cerr << "[Error] write_image_png: empty image data\n";
-        return false;
-    }
-
-    int stride_in_bytes = img.width * img.channels;
-    int ok = stbi_write_png(path.c_str(),
-        img.width,
-        img.height,
-        img.channels,
-        img.data.data(),
-        stride_in_bytes);
-
-    if (!ok) {
-        std::cerr << "[Error] Failed to write PNG: " << path << std::endl;
-        return false;
+    if (opt.mode.empty()) return false;
+    if (opt.batch) {
+        if (positional.size() < 2) return false;
+        opt.vis_dir = positional[0];
+        opt.ir_dir = positional[1];
+        if (opt.output_dir.empty()) opt.output_dir = "build/output";
+    } else {
+        if (positional.size() < 2) return false;
+        opt.vis_path = positional[0];
+        opt.ir_path = positional[1];
+        if (opt.output_dir.empty()) opt.output_dir = "build/output";
     }
     return true;
 }
 
 int main(int argc, char** argv)
 {
-    // §A¥i¥H¥Î©R¥O¦C°Ñ¼Æ«ü©w¸ô®|¡G
-    //   FinalProject.exe rgb.png ir.png
-    // ­Y¨Sµ¹¡A´N¥Î¹w³]ÀÉ¦W
-    std::string rgb_path = "C:/git_repos/MMIP/FinalProject/assets/vis/00000.png";
-    std::string ir_path = "C:/git_repos/MMIP/FinalProject/assets/ir/00000.png";
-
-    if (argc >= 3) {
-        rgb_path = argv[1];
-        ir_path = argv[2];
-    }
-
-    std::cout << "[Info] RGB image path: " << rgb_path << "\n";
-    std::cout << "[Info] IR  image path: " << ir_path << "\n";
-
-    Image rgb_img;
-    Image ir_img;
-
-    // Åª¨ú RGB¡G´Á±æ 3 channel¡]R,G,B¡^
-    if (!load_image(rgb_path, 3, rgb_img)) {
-        std::cerr << "[Fatal] Cannot load RGB image. Abort.\n";
+    // ä½¿ç”¨æ–¹å¼ï¼š
+    // å–®å¼µ: FinalProject.exe --mode dwt <vis_path> <ir_path> --output <out_dir> 
+    // æ‰¹æ¬¡: FinalProject.exe --mode dwt --batch <vis_dir> <ir_dir> --output <output_dir> 
+    Options opt;
+    if (!parse_args(argc, argv, opt)) {
+        std::cerr << "Wrong arguments.\n"
+                  << "  Single: " << argv[0] << " --mode dwt vis.png ir.png --output build/output\n"
+                  << "  Batch: " << argv[0] << " --mode dwt --batch assets/Vis assets/Ir --output build/output\n";
         return 1;
     }
 
-    // Åª¨ú IR¡G³q±`¬O 1 channel ¦Ç¶¥
-    if (!load_image(ir_path, 1, ir_img)) {
-        std::cerr << "[Fatal] Cannot load IR image. Abort.\n";
-        return 1;
+    if (opt.mode == "dwt") {
+        if (opt.batch) {
+            return run_dwt_batch(opt);
+        } else {
+            return run_dwt_single(opt);
+        }
     }
 
-    std::cout << "[Info] RGB  size: " << rgb_img.width << " x "
-        << rgb_img.height << " x " << rgb_img.channels << "\n";
-    std::cout << "[Info] IR   size: " << ir_img.width << " x "
-        << ir_img.height << " x " << ir_img.channels << "\n";
-
-    // ===== ¤Ø¤oÀË¬d¡G¬O§_³£¬O 1024 x 768 =====
-    const int EXPECT_W = 1024;
-    const int EXPECT_H = 768;
-
-    if (rgb_img.width != EXPECT_W || rgb_img.height != EXPECT_H) {
-        std::cerr << "[Warning] RGB image is not 1024x768 ("
-            << rgb_img.width << "x" << rgb_img.height << ")\n";
-    }
-    if (ir_img.width != EXPECT_W || ir_img.height != EXPECT_H) {
-        std::cerr << "[Warning] IR image is not 1024x768 ("
-            << ir_img.width << "x" << ir_img.height << ")\n";
-    }
-
-    // ¦AÀË¬d¨â±i¹Ï¤Ø¤o¬O§_¤@­P
-    if (rgb_img.width != ir_img.width || rgb_img.height != ir_img.height) {
-        std::cerr << "[Fatal] RGB and IR image sizes do not match.\n";
-        return 1;
-    }
-    std::cout << "[Info] Images loaded successfully. Ready for DWT / fusion.\n";
-    
-    // =====  DWT fusion =====
-
-
-
-
-
-
-
-    // ¼g¤@¥÷¿é¥X½T»{Åª¨ú¥¿±`
-    if (!write_image_png("build/output/rgb_check.png", rgb_img)) {
-        std::cerr << "[Warning] Failed to write rgb_check.png\n";
-    }
-    if (!write_image_png("build/output/ir_check.png", ir_img)) {
-        std::cerr << "[Warning] Failed to write ir_check.png\n";
-    }
-
-    return 0;
+    std::cerr << "[Error] Unsupported mode: " << opt.mode << "\n";
+    return 1;
 }
