@@ -90,7 +90,7 @@ build\Release\FinalProject.exe --mode dtcwt --batch assets/Vis assets/Ir --outpu
 ---
 
 ## 參數說明
-- **`--mode <dwt|swt|dtcwt|dtcwt_test>`**
+- **`--mode <dwt|swt|dtcwt>`**
 - **`--batch`**：啟用批次模式
 - **`--output <dir>`**：輸出資料夾（必填）
 ---
