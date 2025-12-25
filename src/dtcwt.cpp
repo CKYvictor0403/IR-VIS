@@ -217,43 +217,6 @@ static void analysis_1d_qshift_coldfilt(
         hi[static_cast<size_t>(k)] = acc1;
     }
 }
-// static void analysis_1d_qshift_coldfilt(
-//     const std::vector<double>& x,
-//     const std::vector<double>& h0,
-//     const std::vector<double>& h1,
-//     std::vector<double>& lo,
-//     std::vector<double>& hi)
-// {
-//     const int n = static_cast<int>(x.size());
-//     const int L = static_cast<int>(h0.size());
-//     const int m = n / 2; // Q-shift assumes even length
-
-//     lo.assign(m, 0.0);
-//     hi.assign(m, 0.0);
-
-//     // polyphase filtering
-//     for (int k = 0; k < m; ++k) {
-//         double acc_lo = 0.0;
-//         double acc_hi = 0.0;
-
-//         for (int t = 0; t < L; ++t) {
-//             // polyphase index (this is the key difference!)
-//             int idx = 2 * k - t;
-
-//             // symmetric extension
-//             while (idx < 0 || idx >= n) {
-//                 if (idx < 0) idx = -idx - 1;
-//                 if (idx >= n) idx = 2 * n - idx - 1;
-//             }
-
-//             acc_lo += h0[t] * x[idx];
-//             acc_hi += h1[t] * x[idx];
-//         }
-
-//         lo[k] = acc_lo;
-//         hi[k] = acc_hi;
-//     }
-// }
 
 static void synth_1d(const std::vector<double>& lo,
                      const std::vector<double>& hi,
@@ -327,35 +290,6 @@ static void synth_1d_qshift_colifilt(
         }
     }
 }
-// static void synth_1d_qshift_colifilt(
-//     const std::vector<double>& lo,
-//     const std::vector<double>& hi,
-//     const std::vector<double>& g0,
-//     const std::vector<double>& g1,
-//     std::vector<double>& x)
-// {
-//     const int m = static_cast<int>(lo.size());
-//     const int n = 2 * m;
-//     const int L = static_cast<int>(g0.size());
-
-//     x.assign(n, 0.0);
-
-//     for (int k = 0; k < m; ++k) {
-//         for (int t = 0; t < L; ++t) {
-//             // Synthesis corresponds to conv(upsample(lo,2), g0) with Q-shift filters.
-//             int idx = 2 * k + t;
-
-//             // symmetric extension
-//             while (idx < 0 || idx >= n) {
-//                 if (idx < 0) idx = -idx - 1;
-//                 if (idx >= n) idx = 2 * n - idx - 1;
-//             }
-
-//             x[idx] += g0[t] * lo[k];
-//             x[idx] += g1[t] * hi[k];
-//         }
-//     }
-// }
 
 // -------------------------------
 // 2D separable analysis for a (rowTree, colTree)
