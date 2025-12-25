@@ -1,4 +1,4 @@
-#include "dwt.h"
+#include "swt.h"
 
 #include <algorithm>
 #include <cmath>
@@ -13,12 +13,12 @@
 namespace fs = std::filesystem;
 
 static void fuse_subband_local_energy(const double* Yc,
-    const double* IRc,
-    double* F,
-    int rows,
-    int cols,
-    bool is_LL,
-    double enhancement_factor = 1.0)
+                                      const double* IRc,
+                                      double* F,
+                                      int rows,
+                                      int cols,
+                                      bool is_LL,
+                                      double enhancement_factor = 1.0)
 {
     const int R = 1;
     const double eps = 1e-8;
@@ -38,25 +38,24 @@ static void fuse_subband_local_energy(const double* Yc,
                     Ei += std::fabs(IRc[rr * cols + cc]);
                 }
             }
-
             double wy, wi;
             
             wi = Ei / (Ei + Ey + eps);
             wy = 1.0 - wi;
-
+            
             int idx = r * cols + c;
             F[idx] = wy * Yc[idx] + wi * IRc[idx];
-
+            
             if (!is_LL) F[idx] *= enhancement_factor;
         }
     }
 }
 
-// 融合單張圖片的函式
-bool dwt_fused_image(const std::string& rgb_path, 
-    const std::string& ir_path,
-    const std::string& output_path,
-    wt2_object wt)
+// 融合單張圖片的函式（SWT）
+bool swt_fused_image(const std::string& rgb_path,
+                     const std::string& ir_path,
+                     const std::string& output_path,
+                     wt2_object wt)
 {
     Image rgb_img;
     Image ir_img;
@@ -75,23 +74,23 @@ bool dwt_fused_image(const std::string& rgb_path,
 
     // 檢查兩張圖尺寸是否一致
     if (rgb_img.width != ir_img.width || rgb_img.height != ir_img.height) {
-        std::cerr << "[Error] RGB and IR size mismatch! RGB: " 
-        << rgb_img.width << "x" << rgb_img.height 
-        << ", IR: " << ir_img.width << "x" << ir_img.height << "\n";
+        std::cerr << "[Error] RGB and IR size mismatch! RGB: "
+                  << rgb_img.width << "x" << rgb_img.height
+                  << ", IR: " << ir_img.width << "x" << ir_img.height << "\n";
         return false;
     }
 
     const int w = rgb_img.width;
     const int h = rgb_img.height;
 
-    // 檢查 DWT 物件尺寸是否與輸入一致（wt2_object 是固定 rows/cols 的）
+    // 檢查 SWT 物件尺寸是否與輸入一致
     if (wt == nullptr) {
         std::cerr << "[Error] wt2_object is null\n";
         return false;
     }
     if (wt->rows != h || wt->cols != w) {
         std::cerr << "[Error] wt2_object size mismatch! wt=(" << wt->cols << "x" << wt->rows
-        << "), img=(" << w << "x" << h << ")\n";
+                  << "), img=(" << w << "x" << h << ")\n";
         return false;
     }
 
@@ -100,9 +99,9 @@ bool dwt_fused_image(const std::string& rgb_path,
     rgb_to_ycbcr(rgb_img, Y, Cb, Cr);
     ir_to_double(ir_img, IR);
 
-    // 3) 對 Y 與 IR 各做一次 2D DWT
-    double* coeff_Y = dwt2(wt, Y.data());
-    double* coeff_IR = dwt2(wt, IR.data());
+    // 3) 對 Y 與 IR 各做一次 2D SWT（不下採樣）
+    double* coeff_Y = swt2(wt, Y.data());
+    double* coeff_IR = swt2(wt, IR.data());
 
     // 4) 準備一個 fused 的係數向量
     std::vector<double> coeff_fused(wt->outlength, 0.0);
@@ -145,11 +144,11 @@ bool dwt_fused_image(const std::string& rgb_path,
         fuse_subband_local_energy(HH_Y, HH_IR, HH_F, sub_rows, sub_cols, /*is_LL=*/false, 1.5);
     }
 
-    // 5) 反變換，重建 Y_fused
-    std::vector<double> Y_fused(w * h);
-    idwt2(wt, coeff_fused.data(), Y_fused.data());
+    // 5) 反變換，重建 Y_fused（SWT）
+    std::vector<double> Y_fused(static_cast<size_t>(w) * static_cast<size_t>(h));
+    iswt2(wt, coeff_fused.data(), Y_fused.data());
 
-    // 清理 DWT 資源
+    // 清理 SWT 資源
     free(coeff_Y);
     free(coeff_IR);
 
@@ -157,7 +156,6 @@ bool dwt_fused_image(const std::string& rgb_path,
     Image fused_img;
     fused_img.width = w;
     fused_img.height = h;
-
     ycbcr_to_rgb(Y_fused, Cb, Cr, fused_img);
 
     // 7) 寫出融合結果
@@ -169,9 +167,9 @@ bool dwt_fused_image(const std::string& rgb_path,
     return true;
 }
 
-int run_dwt_single(const Options& opt) {
+int run_swt_single(const Options& opt) {
     const std::string wave_name = "sym4";
-    std::cout << "[Info] Mode: dwt (single)\n";
+    std::cout << "[Info] Mode: swt (single)\n";
     std::cout << "[Info] VIS: " << opt.vis_path << "\n";
     std::cout << "[Info] IR : " << opt.ir_path << "\n";
     std::cout << "[Info] Output directory: " << opt.output_dir << "\n";
@@ -194,14 +192,14 @@ int run_dwt_single(const Options& opt) {
         std::cerr << "[Error] wave_init failed\n";
         return 1;
     }
-    wt2_object wt = wt2_init(wave, const_cast<char*>("dwt"), h, w, 1);
+    wt2_object wt = wt2_init(wave, const_cast<char*>("swt"), h, w, 1);
     if (!wt) {
         std::cerr << "[Error] wt2_init failed\n";
         wave_free(wave);
         return 1;
     }
 
-    bool ok = dwt_fused_image(opt.vis_path, opt.ir_path, output_path, wt);
+    bool ok = swt_fused_image(opt.vis_path, opt.ir_path, output_path, wt);
     if (ok) std::cout << "[Info] Success\n";
 
     wt2_free(wt);
@@ -209,9 +207,9 @@ int run_dwt_single(const Options& opt) {
     return ok ? 0 : 1;
 }
 
-int run_dwt_batch(const Options& opt) {
+int run_swt_batch(const Options& opt) {
     const std::string wave_name = "sym4";
-    std::cout << "[Info] Mode: dwt (batch)\n";
+    std::cout << "[Info] Mode: swt (batch)\n";
     std::cout << "[Info] VIS directory: " << opt.vis_dir << "\n";
     std::cout << "[Info] IR directory: " << opt.ir_dir << "\n";
     std::cout << "[Info] Output directory: " << opt.output_dir << "\n";
@@ -245,7 +243,7 @@ int run_dwt_batch(const Options& opt) {
     int current_w = 0;
     int current_h = 0;
 
-    auto reset_dwt_context = [&]() {
+    auto reset_swt_context = [&]() {
         if (wt) {
             wt2_free(wt);
             wt = nullptr;
@@ -256,17 +254,17 @@ int run_dwt_batch(const Options& opt) {
         }
     };
 
-    auto ensure_dwt_context = [&](int width, int height) -> bool {
+    auto ensure_swt_context = [&](int width, int height) -> bool {
         if (wt && wave && width == current_w && height == current_h) {
             return true;
         }
-        reset_dwt_context();
+        reset_swt_context();
         wave = wave_init(const_cast<char*>(wave_name.c_str()));
         if (!wave) {
             std::cerr << "[Error] Cannot initialize wave (" << wave_name << ")\n";
             return false;
         }
-        wt = wt2_init(wave, const_cast<char*>("dwt"), height, width, 1);
+        wt = wt2_init(wave, const_cast<char*>("swt"), height, width, 1);
         if (!wt) {
             std::cerr << "[Error] Cannot initialize wt2_object (" << width << "x" << height << ")\n";
             wave_free(wave);
@@ -295,15 +293,15 @@ int run_dwt_batch(const Options& opt) {
             fail_count++;
             continue;
         }
-        if (!ensure_dwt_context(vis_w, vis_h)) {
-            reset_dwt_context();
+        if (!ensure_swt_context(vis_w, vis_h)) {
+            reset_swt_context();
             return 1;
         }
 
         std::cout << "[" << (success_count + fail_count + 1) << "/" << vis_files.size()
             << "] Processing: " << filename << ".png ... ";
 
-        if (dwt_fused_image(vis_path, ir_path, output_path, wt)) {
+        if (swt_fused_image(vis_path, ir_path, output_path, wt)) {
             std::cout << "Success\n";
             success_count++;
         } else {
@@ -312,7 +310,7 @@ int run_dwt_batch(const Options& opt) {
         }
     }
 
-    reset_dwt_context();
+    reset_swt_context();
 
     std::cout << "========================================\n";
     std::cout << "[Info] Completed! Success: " << success_count
